@@ -82,21 +82,29 @@ def _steps(lo: float, hi: float, step: float = 0.5) -> list[float]:
 def _check_bbox(min_lon, min_lat, max_lon, max_lat) -> tuple[float, float, float, float]:
     min_lat, min_lon = _check(min_lat, min_lon)
     max_lat, max_lon = _check(max_lat, max_lon)
-    if min_lon > max_lon or min_lat > max_lat:
-        raise ValueError("bbox must be min_lon, min_lat, max_lon, max_lat with min <= max")
+    if min_lat > max_lat:
+        raise ValueError("bbox must be min_lon, min_lat, max_lon, max_lat with min_lat <= max_lat")
     return min_lon, min_lat, max_lon, max_lat
+
+
+def _wrap(lon: float) -> float:
+    """Bring a longitude in (-180, 540] back into [-180, 180]."""
+    return lon - 360 if lon > 180 else lon
 
 
 def zones_spanned(min_lon: float, min_lat: float, max_lon: float, max_lat: float) -> list[UTMZone]:
     """All zones a bounding box touches (sampled on a 0.5 degree grid).
 
     A zone is flagged ``polar`` if any part of the box inside it lies outside 80S-84N.
+    If ``min_lon > max_lon`` the box is taken to cross the antimeridian (RFC 7946).
     """
     min_lon, min_lat, max_lon, max_lat = _check_bbox(min_lon, min_lat, max_lon, max_lat)
+    if min_lon > max_lon:
+        max_lon += 360
     found: dict[int, UTMZone] = {}
     for lat in _steps(min_lat, max_lat):
         for lon in _steps(min_lon, max_lon):
-            z = zone_for_point(lat, lon)
+            z = zone_for_point(lat, _wrap(lon))
             prev = found.get(z.epsg)
             if prev is None:
                 found[z.epsg] = z
@@ -108,10 +116,13 @@ def zones_spanned(min_lon: float, min_lat: float, max_lon: float, max_lat: float
 def zone_for_bbox(min_lon: float, min_lat: float, max_lon: float, max_lat: float) -> UTMZone:
     """Zone of the bounding box centre (the usual choice for projecting it).
 
-    ``polar`` is set if any part of the box lies outside 80S-84N.
+    ``polar`` is set if any part of the box lies outside 80S-84N. If
+    ``min_lon > max_lon`` the box is taken to cross the antimeridian.
     """
     min_lon, min_lat, max_lon, max_lat = _check_bbox(min_lon, min_lat, max_lon, max_lat)
-    z = zone_for_point((min_lat + max_lat) / 2, (min_lon + max_lon) / 2)
+    if min_lon > max_lon:
+        max_lon += 360
+    z = zone_for_point((min_lat + max_lat) / 2, _wrap((min_lon + max_lon) / 2))
     if min_lat < -80 or max_lat > 84:
         z = replace(z, polar=True)
     return z
