@@ -1,0 +1,20 @@
+[build-system]
+requires = ["setuptools>=77"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "utm-zone-finder"
+version = "0.1.0"
+description = "Find the right UTM zone and EPSG code for a point, bounding box or GeoJSON file, including the Norway/Svalbard exceptions."
+readme = "README.md"
+license = "MIT"
+license-files = ["LICENSE"]
+requires-python = ">=3.10"
+dependencies = []
+keywords = ["gis", "utm", "epsg", "crs", "geojson"]
+
+[project.scripts]
+utm-zone-finder = "utm_zone_finder.cli:main"
+
+[tool.setuptools.packages.find]
+where = ["src"]
