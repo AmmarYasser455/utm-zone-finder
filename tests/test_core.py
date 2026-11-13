@@ -55,7 +55,7 @@ def test_bbox():
     assert zone_for_bbox(-1, 50, 1, 52).epsg == 32631
     assert [z.number for z in zones_spanned(-1, 50, 1, 52)] == [30, 31]
     with pytest.raises(ValueError):
-        zone_for_bbox(5, 0, 1, 1)
+        zone_for_bbox(0, 5, 1, 1)
 
 
 def test_geojson(tmp_path):
@@ -234,3 +234,15 @@ def test_polar_flag_across_80s():
     assert zone_for_bbox(10, 80, 12, 85).polar
     # Only the part of the box that is actually polar marks a zone polar.
     assert [(z.name, z.polar) for z in zones_spanned(-1, 50, 1, 52)] == [("30N", False), ("31N", False)]
+
+
+def test_bbox_crossing_antimeridian(capsys):
+    # min_lon > max_lon means the box wraps over 180 (e.g. Fiji).
+    assert [z.number for z in zones_spanned(170, -20, -170, -10)] == [1, 2, 59, 60]
+    assert zone_for_bbox(178, 10, -170, 20).number == 1  # centre at -176
+    assert zone_for_bbox(170, 10, -178, 20).number == 60  # centre at 176
+    with pytest.raises(ValueError):
+        zone_for_bbox(170, 20, -170, 10)  # lat order is still checked
+    assert main(["bbox", "178", "-20", "-178", "-10"]) == 0
+    out = capsys.readouterr().out
+    assert "Spans zones: 1S (EPSG:32701), 60S (EPSG:32760)" in out
