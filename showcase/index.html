@@ -1,0 +1,65 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Which UTM zone fits each Egyptian governorate?</title>
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
+<style>
+  body { margin: 0; font-family: system-ui, sans-serif; }
+  header { padding: 8px 14px; }
+  h1 { font-size: 1.15rem; margin: 0 0 4px; }
+  p { margin: 0; font-size: 0.9rem; }
+  #map { height: calc(100vh - 100px); }
+  .legend { background: #fff; padding: 6px 10px; line-height: 1.5; border-radius: 4px; }
+  .legend i { display: inline-block; width: 12px; height: 12px; margin-right: 6px; }
+</style>
+</head>
+<body>
+<header>
+  <h1>Which UTM zone fits each Egyptian governorate?</h1>
+  <p>Each governorate is coloured by the UTM zone utm-zone-finder returns for its bounding-box centre; dashed outlines span more than one zone.
+  Click a governorate for its zone, EPSG code and spanned zones.
+  Source and method: <a href="https://github.com/AmmarYasser455/utm-zone-finder">utm-zone-finder on GitHub</a>. Serve this folder over http (for example <code>python -m http.server</code>) so the page can load map.geojson.</p>
+</header>
+<div id="map"></div>
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<script>
+var colors = {"35": "#4c78a8", "36": "#f58518", "37": "#54a24b"};
+var map = L.map('map');
+L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png', {
+  maxZoom: 18,
+  attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors. Boundaries: Natural Earth.'
+}).addTo(map);
+function esc(s) { return String(s).replace(/[&<>"]/g, function (c) {
+  return {'&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;'}[c]; }); }
+fetch('map.geojson').then(function (r) { return r.json(); }).then(function (data) {
+  var layer = L.geoJSON(data, {
+    style: function (f) {
+      var p = f.properties;
+      return {color: p.spans_multiple_zones ? '#000' : '#fff', weight: p.spans_multiple_zones ? 2 : 1,
+              dashArray: p.spans_multiple_zones ? '5 4' : null,
+              fillColor: colors[p.utm_zone_number], fillOpacity: 0.6};
+    },
+    onEachFeature: function (f, l) {
+      var p = f.properties;
+      l.bindPopup('<b>' + esc(p.name) + '</b> (' + esc(p.name_ar) + ')<br>UTM zone: ' + esc(p.utm_zone) +
+        '<br>EPSG: ' + esc(p.epsg) + '<br>Central meridian: ' + esc(p.central_meridian) + '&deg;E' +
+        '<br>Zones spanned: ' + esc(p.zones_spanned.join(', ')) +
+        '<br>Longitude extent: ' + p.min_lon.toFixed(2) + ' to ' + p.max_lon.toFixed(2));
+    }
+  }).addTo(map);
+  map.fitBounds(layer.getBounds());
+  var legend = L.control({position: 'bottomleft'});
+  legend.onAdd = function () {
+    var d = L.DomUtil.create('div', 'legend');
+    Object.keys(colors).forEach(function (n) {
+      d.innerHTML += '<i style="background:' + colors[n] + '"></i>Zone ' + n + 'N (EPSG:' + (32600 + Number(n)) + ')<br>';
+    });
+    return d;
+  };
+  legend.addTo(map);
+});
+</script>
+</body>
+</html>

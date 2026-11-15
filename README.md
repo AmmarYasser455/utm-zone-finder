@@ -83,6 +83,16 @@ zone_for_geojson("area.geojson")                  # path or parsed dict
   ring closure, winding order and self-intersection are not checked, and
   foreign members and `crs` are ignored.
 
+## Showcase
+
+Which UTM zone fits each Egyptian governorate? The tool run on Natural Earth
+boundaries, see [showcase/](showcase/).
+
+![map](showcase/map.png)
+
+[Report](showcase/README.md), [notebook](showcase/showcase.ipynb),
+[web map](showcase/index.html) and [map.geojson](showcase/map.geojson).
+
 ## License
 
 MIT, see [LICENSE](LICENSE).
