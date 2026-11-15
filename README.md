@@ -69,8 +69,16 @@ zone_for_geojson("area.geojson")                  # path or parsed dict
   data spanning several zones is listed but not split. `zones_spanned` samples
   a 0.5 degree grid, so a sliver narrower than that could be missed.
 - A bbox with min_lon > max_lon is read as crossing the antimeridian (RFC 7946),
-  e.g. `bbox 170 -20 -170 -10` for Fiji. GeoJSON files are not given this
-  treatment: their extent is the plain min/max of the coordinates.
+  e.g. `bbox 170 -20 -170 -10` for Fiji. For GeoJSON, a top-level RFC 7946
+  `bbox` member (4 or 6 numbers) is used as the extent, so a file declaring
+  `"bbox": [177, -19, -178, -16]` gets zone 60S instead of a zone near 0.
+  The declared bbox must contain every position and every line/ring edge,
+  edges being straight lines in lon/lat space (so data crossing 180 must be
+  cut there, RFC 7946 section 3.1.9); otherwise it is rejected as invalid.
+  `bbox_from_geojson` then returns it as declared, possibly with
+  min_lon > max_lon. Altitudes in a 6-number bbox and `bbox` members of nested
+  objects are not checked against the data; `"bbox": null` counts as absent.
+  Without a `bbox` the extent is the plain min/max of the coordinates.
 - Latitudes beyond 80S / 84N are outside UTM; a zone is still returned with
   `polar: true` (UPS would be the proper system there). For a bbox or GeoJSON
   extent the flag is set if any part of the extent lies beyond that range.
