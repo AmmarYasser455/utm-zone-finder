@@ -149,19 +149,29 @@ def _position(p, out: list) -> None:
     out.append((lon, lat))
 
 
-def _coords(c, depth: int, t: str, out: list, top: bool = True) -> None:
-    """Validate ``c`` as an array nested exactly ``depth`` levels deep for type ``t``."""
+def _coords(c, depth: int, t: str, out: list, segs: list, top: bool = True) -> None:
+    """Validate ``c`` as an array nested exactly ``depth`` levels deep for type ``t``.
+
+    Positions go to ``out``; the edges of lines and rings go to ``segs``.
+    """
     if depth == 0:
         _position(c, out)
+        segs.append((out[-1], out[-1]))  # a lone position is a zero-length edge
         return
     if not isinstance(c, list):
         raise ValueError(f"invalid GeoJSON: {t} coordinates are not nested correctly")
+    start = len(out)
     if depth == 1 and (c or not top):  # an empty top-level array is an empty geometry
         need = _MIN_POSITIONS.get(t, 0)
         if len(c) < need:
             raise ValueError(f"invalid GeoJSON: each {t} line/ring needs at least {need} positions")
     for item in c:
-        _coords(item, depth - 1, t, out, top=False)
+        _coords(item, depth - 1, t, out, segs, top=False)
+    if depth == 1 and t in _MIN_POSITIONS:
+        line = out[start:]
+        segs.extend(zip(line, line[1:]))
+        if t.endswith("Polygon") and line and line[0] != line[-1]:
+            segs.append((line[-1], line[0]))  # an unclosed ring still closes
 
 
 def _members(obj: dict, key: str) -> list:
@@ -171,7 +181,7 @@ def _members(obj: dict, key: str) -> list:
     return items
 
 
-def _collect(obj, out: list, allowed: frozenset = _ANY) -> None:
+def _collect(obj, out: list, segs: list, allowed: frozenset = _ANY) -> None:
     if not isinstance(obj, dict):
         raise ValueError("invalid GeoJSON: expected an object")
     t = obj.get("type")
@@ -183,23 +193,79 @@ def _collect(obj, out: list, allowed: frozenset = _ANY) -> None:
         raise ValueError(f"invalid GeoJSON: a {t} is not allowed here")
     if t == "FeatureCollection":
         for f in _members(obj, "features"):
-            _collect(f, out, frozenset({"Feature"}))
+            _collect(f, out, segs, frozenset({"Feature"}))
     elif t == "Feature":
         if "geometry" not in obj:
             raise ValueError("invalid GeoJSON: Feature has no 'geometry' member")
         if obj["geometry"] is not None:
-            _collect(obj["geometry"], out, _GEOMETRIES)
+            _collect(obj["geometry"], out, segs, _GEOMETRIES)
     elif t == "GeometryCollection":
         for g in _members(obj, "geometries"):
-            _collect(g, out, _GEOMETRIES)
+            _collect(g, out, segs, _GEOMETRIES)
     else:
         if "coordinates" not in obj:
             raise ValueError(f"invalid GeoJSON: {t} has no 'coordinates' member")
-        _coords(obj["coordinates"], _GEOMETRY_DEPTH[t], t, out)
+        _coords(obj["coordinates"], _GEOMETRY_DEPTH[t], t, out, segs)
+
+
+_TOL = 1e-9  # degrees
+
+
+def _declared_bbox(obj) -> tuple[float, float, float, float] | None:
+    """The top-level RFC 7946 ``bbox`` member as (west, south, east, north), or None."""
+    if not isinstance(obj, dict) or obj.get("bbox") is None:
+        return None
+    b = obj["bbox"]
+    if not isinstance(b, list) or len(b) not in (4, 6):
+        raise ValueError("invalid GeoJSON: 'bbox' must be an array of 4 or 6 numbers")
+    vals = [_num(v, "GeoJSON bbox value") for v in b]
+    if len(vals) == 6:
+        west, south, low, east, north, high = vals
+        if low > high:
+            raise ValueError("invalid GeoJSON: bbox minimum altitude exceeds maximum altitude")
+    else:
+        west, south, east, north = vals
+    try:
+        return _check_bbox(west, south, east, north)
+    except ValueError as exc:
+        raise ValueError(f"invalid GeoJSON bbox: {exc}") from None
+
+
+def _lon_ranges(west: float, east: float) -> list[tuple[float, float]]:
+    """Longitude intervals covered by a bbox; -180 and 180 are the same meridian."""
+    if west > east:  # crosses the antimeridian
+        return [(west, 180.0), (-180.0, east)]
+    ranges = [(west, east)]
+    if west <= -180 + _TOL:
+        ranges.append((180.0, 180.0))
+    if east >= 180 - _TOL:
+        ranges.append((-180.0, -180.0))
+    return ranges
+
+
+def _check_contains(box, segs: list) -> None:
+    """Every edge, taken as a straight line in lon/lat space, must lie inside ``box``."""
+    west, south, east, north = box
+    ranges = _lon_ranges(west, east)
+    for (lon1, lat1), (lon2, lat2) in segs:
+        lo, hi = min(lon1, lon2), max(lon1, lon2)
+        lon_ok = any(a - _TOL <= lo and hi <= b + _TOL for a, b in ranges)
+        lat_ok = south - _TOL <= min(lat1, lat2) and max(lat1, lat2) <= north + _TOL
+        if not (lon_ok and lat_ok):
+            raise ValueError(
+                f"invalid GeoJSON: declared bbox {list(box)} does not contain the geometry "
+                f"between ({lon1}, {lat1}) and ({lon2}, {lat2})"
+            )
 
 
 def bbox_from_geojson(data) -> tuple[float, float, float, float]:
-    """(min_lon, min_lat, max_lon, max_lat) of a GeoJSON dict or file path."""
+    """(min_lon, min_lat, max_lon, max_lat) of a GeoJSON dict or file path.
+
+    If the top-level object has an RFC 7946 ``bbox`` member it is validated,
+    checked to contain every edge of the geometry and returned as declared, so
+    ``min_lon > max_lon`` means the extent crosses the antimeridian. Without
+    one, the plain min/max of the coordinates is returned.
+    """
     if isinstance(data, (str, bytes)) or hasattr(data, "__fspath__"):
         with open(data, encoding="utf-8") as fh:
             try:
@@ -207,12 +273,17 @@ def bbox_from_geojson(data) -> tuple[float, float, float, float]:
             except RecursionError:
                 raise ValueError("invalid GeoJSON: nested too deeply") from None
     pts: list = []
+    segs: list = []
     try:
-        _collect(data, pts)
+        _collect(data, pts, segs)
     except RecursionError:
         raise ValueError("invalid GeoJSON: nested too deeply") from None
     if not pts:
         raise ValueError("GeoJSON contains no coordinates")
+    declared = _declared_bbox(data)
+    if declared is not None:
+        _check_contains(declared, segs)
+        return declared
     lons, lats = [p[0] for p in pts], [p[1] for p in pts]
     return min(lons), min(lats), max(lons), max(lats)
 

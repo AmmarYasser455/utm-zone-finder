@@ -246,3 +246,88 @@ def test_bbox_crossing_antimeridian(capsys):
     assert main(["bbox", "178", "-20", "-178", "-10"]) == 0
     out = capsys.readouterr().out
     assert "Spans zones: 1S (EPSG:32701), 60S (EPSG:32760)" in out
+
+
+# Suva (178.44E) and Lakeba (178.8W), Fiji: two islands on either side of 180.
+_FIJI = [[178.44, -18.14], [-178.8, -18.2]]
+
+
+def test_declared_bbox_crossing_antimeridian(tmp_path, capsys):
+    pts = {"type": "MultiPoint", "coordinates": _FIJI}
+    # Without a bbox the plain min/max spans most of the globe (centre near 0).
+    assert bbox_from_geojson(pts) == (-178.8, -18.2, 178.44, -18.14)
+    assert zone_for_geojson(pts).number == 30
+    # The declared RFC 7946 bbox wraps over 180 and gives the right zone.
+    doc = dict(pts, bbox=[177, -19, -178, -16])
+    assert bbox_from_geojson(doc) == (177, -19, -178, -16)
+    assert zone_for_geojson(doc).epsg == 32760
+    six = dict(pts, bbox=[177, -19, 0, -178, -16, 100])
+    assert bbox_from_geojson(six) == (177, -19, -178, -16)
+    # A line cut at the antimeridian (RFC 7946 3.1.9); -180 and 180 are the same meridian.
+    cut = {"type": "Feature", "properties": {}, "bbox": [178, -18, -179, -16], "geometry": {
+        "type": "MultiLineString", "coordinates": [[[178, -17], [180, -17]], [[-180, -17], [-179, -17]]]}}
+    assert zone_for_geojson(cut).number == 60
+    edge = {"type": "Point", "coordinates": [180, 0], "bbox": [-180, 0, -179, 0]}
+    assert bbox_from_geojson(edge) == (-180, 0, -179, 0)
+    # "bbox": null is treated as absent.
+    assert bbox_from_geojson(dict(pts, bbox=None)) == (-178.8, -18.2, 178.44, -18.14)
+    p = tmp_path / "fiji.geojson"
+    p.write_text(json.dumps({"type": "FeatureCollection", "bbox": [177, -19, -178, -16], "features": [
+        {"type": "Feature", "properties": {}, "geometry": pts}]}), encoding="utf-8")
+    assert main(["geojson", str(p)]) == 0
+    out = capsys.readouterr().out
+    assert out.startswith("UTM zone 60S  EPSG:32760")
+    assert "1S (EPSG:32701)" in out and "30S" not in out
+
+
+_LINE = {"type": "LineString", "coordinates": [[10, 50], [12, 52]]}
+
+
+@pytest.mark.parametrize(
+    "doc",
+    [
+        # malformed bbox members
+        dict(_LINE, bbox=[10, 50, 12]),
+        dict(_LINE, bbox=[10, 50, 12, 52, 0]),
+        dict(_LINE, bbox=[]),
+        dict(_LINE, bbox="10,50,12,52"),
+        dict(_LINE, bbox={"west": 10}),
+        dict(_LINE, bbox=True),
+        dict(_LINE, bbox=5),
+        dict(_LINE, bbox=[10, 50, "12", 52]),
+        dict(_LINE, bbox=[10, 50, None, 52]),
+        dict(_LINE, bbox=[10, 50, True, 52]),
+        dict(_LINE, bbox=[10, float("nan"), 12, 52]),
+        dict(_LINE, bbox=[10, 50, float("inf"), 52]),
+        dict(_LINE, bbox=[10, 50, 10**400, 52]),
+        dict(_LINE, bbox=[10, 50, 200, 52]),
+        dict(_LINE, bbox=[-181, 50, 12, 52]),
+        dict(_LINE, bbox=[10, 52, 12, 50]),
+        dict(_LINE, bbox=[10, 50, 12, 91]),
+        dict(_LINE, bbox=[10, 50, 5, 12, 52, 0]),
+        # a bbox without valid GeoJSON around it
+        {"bbox": [0, 0, 1, 1]},
+        {"type": "Point", "bbox": [0, 0, 1, 1]},
+        {"type": "FeatureCollection", "features": [], "bbox": [0, 0, 1, 1]},
+        # a bbox that does not contain the geometry
+        dict(_LINE, bbox=[10, 50, 11, 52]),
+        dict(_LINE, bbox=[10, 51, 12, 52]),
+        dict(_LINE, bbox=[12, 50, 10, 52]),
+        {"type": "MultiPoint", "coordinates": _FIJI, "bbox": [178, -19, -179, -16]},
+        # the edge between the vertices runs through 0 in lon/lat space
+        {"type": "LineString", "coordinates": [[-170, 0], [170, 0]], "bbox": [170, 0, -170, 0]},
+        {"type": "Polygon", "bbox": [170, 0, -170, 1],
+         "coordinates": [[[170, 0], [-170, 0], [-170, 1], [170, 1], [170, 0]]]},
+        {"type": "Feature", "bbox": [170, 0, -170, 0], "geometry": {"type": "GeometryCollection",
+         "geometries": [{"type": "LineString", "coordinates": [[-170, 0], [170, 0]]}]}},
+    ],
+)
+def test_invalid_declared_bbox(doc, tmp_path, capsys):
+    with pytest.raises(ValueError):
+        bbox_from_geojson(doc)
+    with pytest.raises(ValueError):
+        zone_for_geojson(doc)
+    p = tmp_path / "bad.geojson"
+    p.write_text(json.dumps(doc), encoding="utf-8")
+    assert main(["geojson", str(p)]) == 2
+    assert "error:" in capsys.readouterr().err
