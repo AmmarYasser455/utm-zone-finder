@@ -74,9 +74,21 @@ def zone_for_point(lat: float, lon: float) -> UTMZone:
     )
 
 
-def _steps(lo: float, hi: float, step: float = 0.5) -> list[float]:
-    n = int(math.ceil((hi - lo) / step))
-    return [lo + i * step for i in range(n)] + [hi]
+# Every longitude/latitude where zone_for_point can change its answer: the
+# 6 degree meridians, the Norway/Svalbard edges, the equator and the UTM limits.
+_LON_EDGES = sorted(set(range(-180, 181, 6)) | {3, 9, 12, 21, 33, 42})
+_LAT_EDGES = (-80, 0, 56, 64, 72, 84)
+
+
+def _samples(lo: float, hi: float, edges) -> list[float]:
+    """One value per piece of [lo, hi] on which zone_for_point is constant.
+
+    The pieces are the edges inside [lo, hi] and the open gaps between them, so
+    the edges themselves plus the midpoint of every gap cover all of them.
+    """
+    cuts = sorted({lo, hi} | {e for e in edges if lo < e < hi})
+    mids = [(a + b) / 2 for a, b in zip(cuts, cuts[1:])]
+    return sorted(cuts + mids)
 
 
 def _check_bbox(min_lon, min_lat, max_lon, max_lat) -> tuple[float, float, float, float]:
@@ -93,17 +105,21 @@ def _wrap(lon: float) -> float:
 
 
 def zones_spanned(min_lon: float, min_lat: float, max_lon: float, max_lat: float) -> list[UTMZone]:
-    """All zones a bounding box touches (sampled on a 0.5 degree grid).
+    """All zones a bounding box touches, edges included.
 
+    The box is checked at every zone edge it contains and between them, so no
+    zone is missed however narrow its part of the box is.
     A zone is flagged ``polar`` if any part of the box inside it lies outside 80S-84N.
     If ``min_lon > max_lon`` the box is taken to cross the antimeridian (RFC 7946).
     """
     min_lon, min_lat, max_lon, max_lat = _check_bbox(min_lon, min_lat, max_lon, max_lat)
+    lon_edges = _LON_EDGES
     if min_lon > max_lon:
-        max_lon += 360
+        max_lon += 360  # work in [min_lon, max_lon + 360] and wrap back
+        lon_edges = _LON_EDGES + [e + 360 for e in _LON_EDGES]
     found: dict[int, UTMZone] = {}
-    for lat in _steps(min_lat, max_lat):
-        for lon in _steps(min_lon, max_lon):
+    for lat in _samples(min_lat, max_lat, _LAT_EDGES):
+        for lon in _samples(min_lon, max_lon, lon_edges):
             z = zone_for_point(lat, _wrap(lon))
             prev = found.get(z.epsg)
             if prev is None:

@@ -66,8 +66,14 @@ zone_for_geojson("area.geojson")                  # path or parsed dict
 
 - Only WGS84 longitude/latitude input is supported.
 - For a bbox or GeoJSON file the zone of the bounding-box centre is returned;
-  data spanning several zones is listed but not split. `zones_spanned` samples
-  a 0.5 degree grid, so a sliver narrower than that could be missed.
+  data spanning several zones is listed but not split. `zones_spanned` checks
+  the box at every zone edge it contains (6 degree meridians, the Norway and
+  Svalbard edges, the equator, 80S and 84N). Points exactly on an edge follow
+  `zone_for_point`'s ownership rule (a meridian belongs to the zone east of
+  it, the equator to the north), so a box ending at 6E lists zone 32, while a
+  box starting at 6E does not list zone 31. It works on the bounding box, not on
+  the geometry, so a zone the box covers but the shape itself does not touch
+  is still listed.
 - A bbox with min_lon > max_lon is read as crossing the antimeridian (RFC 7946),
   e.g. `bbox 170 -20 -170 -10` for Fiji. For GeoJSON, a top-level RFC 7946
   `bbox` member (4 or 6 numbers) is used as the extent, so a file declaring

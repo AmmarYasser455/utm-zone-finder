@@ -248,6 +248,93 @@ def test_bbox_crossing_antimeridian(capsys):
     assert "Spans zones: 1S (EPSG:32701), 60S (EPSG:32760)" in out
 
 
+def _dense_spanned(min_lon, min_lat, max_lon, max_lat, step=0.1):
+    """Reference: zone_for_point on a dense grid (edges of the box included)."""
+    if min_lon > max_lon:
+        max_lon += 360
+    nlon = round((max_lon - min_lon) / step)
+    nlat = round((max_lat - min_lat) / step)
+    lons = [min_lon + i * (max_lon - min_lon) / nlon for i in range(nlon + 1)] if nlon else [min_lon]
+    lats = [min_lat + i * (max_lat - min_lat) / nlat for i in range(nlat + 1)] if nlat else [min_lat]
+    found = {}
+    for lat in lats:
+        for lon in lons:
+            z = zone_for_point(lat, lon - 360 if lon > 180 else lon)
+            found[z.name] = found.get(z.name, False) or z.polar
+    return found
+
+
+@pytest.mark.parametrize(
+    "box",
+    [
+        (4.5, 57.9, 31.2, 71.2),  # mainland Norway (Norway exception, zones 32-36)
+        (10.0, 76.4, 33.5, 80.8),  # Svalbard (odd zones only)
+        (-1.0, 50.0, 1.0, 52.0),  # London area, across 0 degrees
+        (29.5, -1.0, 35.0, 4.0),  # Lake Victoria region, across the equator
+        (176.0, -20.0, -178.0, -15.0),  # Fiji, across the antimeridian
+        (2.0, 83.0, 13.0, 85.0),  # across 84N, where Svalbard zones end and polar begins
+        (5.5, 55.5, 12.5, 64.5),  # all four edges of the Norway exception
+        (0.0, 10.0, 6.0, 11.0),  # ends exactly on the 6E zone edge
+    ],
+)
+def test_zones_spanned_matches_dense_grid(box):
+    got = {z.name: z.polar for z in zones_spanned(*box)}
+    assert got == _dense_spanned(*box)
+
+
+def test_zones_spanned_exact_edges():
+    # The 6E meridian belongs to zone 32: ending there lists 32, starting there skips 31.
+    assert [z.name for z in zones_spanned(0, 10, 6, 11)] == ["31N", "32N"]
+    assert [z.name for z in zones_spanned(6, 10, 8, 11)] == ["32N"]
+    # The equator belongs to the northern hemisphere.
+    assert [z.name for z in zones_spanned(0, -1, 1, 0)] == ["31N", "31S"]
+    # A degenerate box is a point.
+    assert zones_spanned(5, 60, 5, 60) == [zone_for_point(60, 5)]
+    # Bergen to just inside the 3E Norway edge: 32V only, 31 not touched.
+    assert [z.name for z in zones_spanned(3.0, 59.0, 5.5, 61.0)] == ["32N"]
+    # Just west of 3E at Norway latitudes is zone 31.
+    assert [z.name for z in zones_spanned(2.999, 59.0, 5.5, 61.0)] == ["31N", "32N"]
+
+
+def test_zones_spanned_whole_world():
+    spanned = zones_spanned(-180, -90, 180, 90)
+    assert len(spanned) == 120  # every zone in both hemispheres
+    assert all(z.polar for z in spanned)  # each reaches beyond 84N or 80S
+    assert [z.number for z in spanned[:3]] == [1, 2, 3]
+
+
+def _count_point_calls(monkeypatch, box):
+    import utm_zone_finder.core as core
+
+    calls = []
+    real = core.zone_for_point
+
+    def counting(lat, lon):
+        calls.append((lat, lon))
+        return real(lat, lon)
+
+    monkeypatch.setattr(core, "zone_for_point", counting)
+    result = core.zones_spanned(*box)
+    return result, len(calls)
+
+
+@pytest.mark.parametrize(
+    "box, max_calls",
+    [
+        # 15 latitude samples x 129 longitude samples; a 0.5 degree grid needs 361 x 721.
+        ((-180, -90, 180, 90), 1935),
+        # One zone, no edge inside: 3 x 3 samples whatever the box size (was 81 x 5).
+        ((0.5, 10.0, 2.5, 50.0), 9),
+        # Fiji across the antimeridian: only the 180 edge is inside, 3 x 5 (was 11 x 13).
+        ((176.0, -20.0, -178.0, -15.0), 15),
+    ],
+)
+def test_zones_spanned_work_is_bounded_by_edges(monkeypatch, box, max_calls):
+    result, n = _count_point_calls(monkeypatch, box)
+    assert result == zones_spanned(*box)
+    assert n <= max_calls
+
+
 # Suva (178.44E) and Lakeba (178.8W), Fiji: two islands on either side of 180.
 _FIJI = [[178.44, -18.14], [-178.8, -18.2]]
 
