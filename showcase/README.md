@@ -19,7 +19,7 @@ For every governorate (CRS: WGS84 lon/lat, EPSG:4326, degrees; x = longitude, y 
 
 1. `bbox_from_geojson(feature)` gives the bounding box in degrees.
 2. `zone_for_bbox(*bbox)` gives the zone of the box centre, with its EPSG code (326xx, WGS84 / UTM north).
-3. `zones_spanned(*bbox)` lists every zone the box touches (0.5 degree sampling, so a sliver narrower than that could be missed).
+3. `zones_spanned(*bbox)` lists every zone the box touches, checked at every zone edge inside the box.
 
 No distances or areas are computed. Zones are 6 degrees wide: 35N covers 24-30 E, 36N 30-36 E, 37N 36-42 E.
 The output polygons are written to `map.geojson` in EPSG:4326 with the zone as properties; ring winding is set to RFC 7946 (exterior counter-clockwise).
