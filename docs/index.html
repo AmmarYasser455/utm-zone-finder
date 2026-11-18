@@ -1,0 +1,44 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>UTM zone of ten real cities</title>
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
+<style>
+  body { margin: 0; font-family: system-ui, sans-serif; }
+  header { padding: 8px 14px; }
+  h1 { font-size: 1.15rem; margin: 0 0 4px; }
+  p { margin: 0; font-size: 0.9rem; }
+  #map { height: calc(100vh - 90px); }
+</style>
+</head>
+<body>
+<header>
+  <h1>UTM zone of ten real cities</h1>
+  <p>Each marker is a city with the UTM zone and EPSG code utm-zone-finder returns for it, including the Norway (Bergen) and Svalbard exceptions. Click a marker for details.
+  <a href="https://github.com/AmmarYasser455/utm-zone-finder">utm-zone-finder on GitHub</a>.</p>
+</header>
+<div id="map"></div>
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<script>
+var map = L.map('map').setView([30, 10], 2);
+L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png', {
+  maxZoom: 18,
+  attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
+}).addTo(map);
+function esc(s) { return String(s).replace(/[&<>"]/g, function (c) {
+  return {'&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;'}[c]; }); }
+fetch('demo.geojson').then(function (r) { return r.json(); }).then(function (data) {
+  L.geoJSON(data, {
+    onEachFeature: function (f, l) {
+      var p = f.properties;
+      l.bindPopup('<b>' + esc(p.name) + '</b> (' + esc(p.country) + ')<br>UTM zone: ' + esc(p.utm_zone) +
+        '<br>EPSG: ' + esc(p.epsg) + '<br>Central meridian: ' + esc(p.central_meridian) + '&deg;');
+      l.bindTooltip(esc(p.name) + ': ' + esc(p.utm_zone));
+    }
+  }).addTo(map);
+});
+</script>
+</body>
+</html>

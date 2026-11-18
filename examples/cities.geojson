@@ -1,0 +1,15 @@
+{
+ "type": "FeatureCollection",
+ "features": [
+  {"type": "Feature", "properties": {"name": "Bergen", "country": "Norway"}, "geometry": {"type": "Point", "coordinates": [5.32, 60.39]}},
+  {"type": "Feature", "properties": {"name": "Tromsø", "country": "Norway"}, "geometry": {"type": "Point", "coordinates": [18.96, 69.65]}},
+  {"type": "Feature", "properties": {"name": "Ny-Ålesund", "country": "Svalbard, Norway"}, "geometry": {"type": "Point", "coordinates": [11.93, 78.92]}},
+  {"type": "Feature", "properties": {"name": "Longyearbyen", "country": "Svalbard, Norway"}, "geometry": {"type": "Point", "coordinates": [15.63, 78.22]}},
+  {"type": "Feature", "properties": {"name": "Reykjavik", "country": "Iceland"}, "geometry": {"type": "Point", "coordinates": [-21.94, 64.15]}},
+  {"type": "Feature", "properties": {"name": "London", "country": "United Kingdom"}, "geometry": {"type": "Point", "coordinates": [-0.13, 51.51]}},
+  {"type": "Feature", "properties": {"name": "Cairo", "country": "Egypt"}, "geometry": {"type": "Point", "coordinates": [31.24, 30.04]}},
+  {"type": "Feature", "properties": {"name": "Quito", "country": "Ecuador"}, "geometry": {"type": "Point", "coordinates": [-78.47, -0.18]}},
+  {"type": "Feature", "properties": {"name": "Sydney", "country": "Australia"}, "geometry": {"type": "Point", "coordinates": [151.21, -33.87]}},
+  {"type": "Feature", "properties": {"name": "Wellington", "country": "New Zealand"}, "geometry": {"type": "Point", "coordinates": [174.78, -41.29]}}
+ ]
+}

@@ -91,6 +91,13 @@ zone_for_geojson("area.geojson")                  # path or parsed dict
   ring closure, winding order and self-intersection are not checked, and
   foreign members and `crs` are ignored.
 
+## Demo
+
+[![Open in Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/AmmarYasser455/utm-zone-finder/blob/main/examples/demo.ipynb)
+
+- [Demo map](https://ammaryasser455.github.io/utm-zone-finder/): ten real cities with the zone the tool returns (Bergen 32V, Svalbard, both hemispheres).
+- [Notebook](examples/demo.ipynb) and [example data](examples/README.md) (`examples/cities.geojson`, tool output in `docs/demo.geojson`).
+
 ## Showcase
 
 Which UTM zone fits each Egyptian governorate? The tool run on Natural Earth
