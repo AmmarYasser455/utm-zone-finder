@@ -418,3 +418,30 @@ def test_invalid_declared_bbox(doc, tmp_path, capsys):
     p.write_text(json.dumps(doc), encoding="utf-8")
     assert main(["geojson", str(p)]) == 2
     assert "error:" in capsys.readouterr().err
+
+
+@pytest.mark.parametrize(
+    "name,lat,lon,epsg",
+    [
+        ("Tromso", 69.65, 18.96, 32634),
+        ("Longyearbyen", 78.22, 15.65, 32633),
+        ("Ny-Alesund", 78.92, 11.93, 32633),
+        ("Nordaustlandet", 79.9, 23.0, 32635),
+        ("Kvitoya", 80.15, 31.5, 32635),
+        ("Oslo", 59.91, 10.75, 32632),
+        ("Stavanger", 58.97, 5.73, 32632),
+        ("Santiago", -33.45, -70.67, 32719),
+    ],
+)
+def test_real_places(name, lat, lon, epsg):
+    assert zone_for_point(lat, lon).epsg == epsg, name
+
+
+def test_cli_text_output_matches_readme(capsys):
+    assert main(["point", "60", "5"]) == 0
+    assert capsys.readouterr().out == "UTM zone 32N  EPSG:32632  central meridian 9\n"
+    assert main(["bbox", "-1", "50", "1", "52"]) == 0
+    assert capsys.readouterr().out == (
+        "UTM zone 31N  EPSG:32631  central meridian 3\n"
+        "Spans zones: 30N (EPSG:32630), 31N (EPSG:32631)\n"
+    )
