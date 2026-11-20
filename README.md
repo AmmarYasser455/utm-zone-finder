@@ -1,7 +1,7 @@
 <p align="center">
   <picture>
-    <source media="(prefers-color-scheme: dark)" srcset="assets/brand/logo-dark.png">
-    <img src="assets/brand/logo.png" alt="utm-zone-finder logo" width="112">
+    <source media="(prefers-color-scheme: dark)" srcset="assets/brand/logo-dark.svg">
+    <img src="assets/brand/logo.svg" alt="utm-zone-finder logo" width="112">
   </picture>
 </p>
 
