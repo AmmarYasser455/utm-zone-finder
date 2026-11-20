@@ -1,3 +1,7 @@
+<p align="center">
+  <img src="assets/brand/logo.png" alt="utm-zone-finder logo" width="112">
+</p>
+
 # utm-zone-finder
 
 Find the right UTM zone and EPSG code for a latitude/longitude, a bounding box
