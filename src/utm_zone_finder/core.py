@@ -274,6 +274,14 @@ def _check_contains(box, segs: list) -> None:
             )
 
 
+def load_json(fh):
+    """Parse JSON from a text stream; malformed or over-nested input raises ValueError."""
+    try:
+        return json.load(fh)
+    except RecursionError:
+        raise ValueError("invalid GeoJSON: nested too deeply") from None
+
+
 def bbox_from_geojson(data) -> tuple[float, float, float, float]:
     """(min_lon, min_lat, max_lon, max_lat) of a GeoJSON dict or file path.
 
@@ -284,10 +292,7 @@ def bbox_from_geojson(data) -> tuple[float, float, float, float]:
     """
     if isinstance(data, (str, bytes)) or hasattr(data, "__fspath__"):
         with open(data, encoding="utf-8") as fh:
-            try:
-                data = json.load(fh)
-            except RecursionError:
-                raise ValueError("invalid GeoJSON: nested too deeply") from None
+            data = load_json(fh)
     pts: list = []
     segs: list = []
     try:

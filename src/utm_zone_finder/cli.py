@@ -6,7 +6,7 @@ import argparse
 import json
 import sys
 
-from .core import bbox_from_geojson, zone_for_bbox, zone_for_point, zones_spanned
+from .core import bbox_from_geojson, load_json, zone_for_bbox, zone_for_point, zones_spanned
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -24,7 +24,7 @@ def build_parser() -> argparse.ArgumentParser:
     bb.add_argument("max_lon", type=float)
     bb.add_argument("max_lat", type=float)
     gj = sub.add_parser("geojson", help="GeoJSON file")
-    gj.add_argument("path")
+    gj.add_argument("path", help="GeoJSON file, or - to read from standard input")
     for s in (pt, bb, gj):
         s.add_argument("--json", action="store_true", help="print JSON")
     return p
@@ -44,7 +44,12 @@ def main(argv: list[str] | None = None) -> int:
             if args.command == "bbox":
                 box = (args.min_lon, args.min_lat, args.max_lon, args.max_lat)
             else:
-                box = bbox_from_geojson(args.path)
+                src = args.path
+                if src == "-":
+                    src = load_json(sys.stdin)
+                    if not isinstance(src, dict):
+                        raise ValueError("standard input is not a GeoJSON object")
+                box = bbox_from_geojson(src)
             zone, spanned = zone_for_bbox(*box), zones_spanned(*box)
     except (ValueError, OSError) as exc:
         print(f"error: {exc}", file=sys.stderr)

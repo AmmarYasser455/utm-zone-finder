@@ -48,12 +48,15 @@ $ utm-zone-finder point 78 15 --json   # Svalbard
 
 ```console
 $ utm-zone-finder geojson area.geojson
+$ cat area.geojson | utm-zone-finder geojson -    # read standard input
 ```
 
 Invalid input (out-of-range, NaN or infinite coordinates, malformed GeoJSON or
 JSON, unreadable files) prints `error: ...` to stderr and exits with status 2.
 The Python API raises `ValueError` for the same cases (and `OSError` for files
 that cannot be opened).
+With `-`, standard input must hold a single GeoJSON object; it is read whole
+into memory using Python's standard-input encoding (normally UTF-8).
 `python -m utm_zone_finder ...` works too.
 
 ## Python

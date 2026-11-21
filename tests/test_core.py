@@ -445,3 +445,65 @@ def test_cli_text_output_matches_readme(capsys):
         "UTM zone 31N  EPSG:32631  central meridian 3\n"
         "Spans zones: 30N (EPSG:32630), 31N (EPSG:32631)\n"
     )
+
+
+def test_cli_geojson_stdin(monkeypatch, capsys):
+    import io
+
+    # Bergen, Norway (lon 5.32, lat 60.39): zone 32 by the Norway exception
+    gj = '{"type": "Point", "coordinates": [5.32, 60.39]}'
+    monkeypatch.setattr("sys.stdin", io.StringIO(gj))
+    assert main(["geojson", "-"]) == 0
+    assert "EPSG:32632" in capsys.readouterr().out
+    monkeypatch.setattr("sys.stdin", io.StringIO("not json"))
+    assert main(["geojson", "-"]) == 2
+    assert capsys.readouterr().err.startswith("error:")
+
+
+@pytest.mark.parametrize(
+    "text",
+    [
+        "",  # empty
+        "   \n",  # whitespace only
+        "not json",
+        "{",
+        "null",
+        "true",
+        "42",
+        "NaN",
+        '"area.geojson"',  # a string is not treated as a path
+        "[]",
+        '[{"type": "Point", "coordinates": [5.32, 60.39]}]',
+        "{}",
+        '{"type": null}',
+        '{"type": "Point"}',
+        '{"type": "Point", "coordinates": null}',
+        '{"type": "Point", "coordinates": [NaN, 60]}',
+        '{"type": "Point", "coordinates": [5, Infinity]}',
+        '{"type": "Point", "coordinates": ["5", 60]}',
+        '{"type": "Point", "coordinates": [5, 91]}',
+        '{"type": "FeatureCollection", "features": {}}',
+        '{"type": "FeatureCollection", "features": []}',
+        "[" * 100000 + "]" * 100000,  # nested too deeply
+        '{"a":' * 100000 + "1" + "}" * 100000,
+    ],
+)
+def test_cli_stdin_rejects_invalid_input(text, monkeypatch, capsys):
+    import io
+
+    monkeypatch.setattr("sys.stdin", io.StringIO(text))
+    assert main(["geojson", "-"]) == 2
+    captured = capsys.readouterr()
+    assert captured.err.startswith("error:")
+    assert captured.out == ""
+
+
+def test_cli_stdin_json_string_is_not_a_path(monkeypatch, capsys, tmp_path):
+    import io
+    import json
+
+    f = tmp_path / "p.geojson"
+    f.write_text('{"type": "Point", "coordinates": [5.32, 60.39]}')
+    monkeypatch.setattr("sys.stdin", io.StringIO(json.dumps(str(f))))
+    assert main(["geojson", "-"]) == 2
+    assert capsys.readouterr().err.startswith("error:")
