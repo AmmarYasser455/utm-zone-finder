@@ -507,3 +507,21 @@ def test_cli_stdin_json_string_is_not_a_path(monkeypatch, capsys, tmp_path):
     monkeypatch.setattr("sys.stdin", io.StringIO(json.dumps(str(f))))
     assert main(["geojson", "-"]) == 2
     assert capsys.readouterr().err.startswith("error:")
+
+
+def test_cli_polar_note_and_southern_hemisphere(capsys):
+    # Near the North Pole (beyond 84N) a zone is returned and flagged as polar.
+    assert main(["point", "89", "0"]) == 0
+    assert capsys.readouterr().out == (
+        "UTM zone 31N  EPSG:32631  central meridian 3  (outside UTM range, polar)\n"
+    )
+    # Sydney (33.87 S, 151.21 E): zone 56 south, EPSG 327xx.
+    assert main(["point", "-33.87", "151.21"]) == 0
+    assert capsys.readouterr().out == "UTM zone 56S  EPSG:32756  central meridian 153\n"
+
+
+def test_cli_bbox_json_has_zone_and_spanned(capsys):
+    assert main(["bbox", "-1", "50", "1", "52", "--json"]) == 0
+    data = json.loads(capsys.readouterr().out)
+    assert data["zone"]["epsg"] == 32631
+    assert [z["epsg"] for z in data["spanned"]] == [32630, 32631]
