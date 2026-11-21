@@ -8,7 +8,8 @@
 # utm-zone-finder
 
 Find the right UTM zone and EPSG code for a latitude/longitude, a bounding box
-or a GeoJSON file, including the Norway and Svalbard exceptions.
+or a GeoJSON file, including the Norway and Svalbard exceptions. Part of
+[OpenTerra](https://github.com/AmmarYasser455), a family of open GIS tools.
 
 Picking `floor((lon + 180) / 6) + 1` is right almost everywhere, but wrong for
 southwest Norway (zone 32 instead of 31) and Svalbard (only zones 31, 33, 35
