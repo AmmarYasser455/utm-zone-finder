@@ -525,3 +525,75 @@ def test_cli_bbox_json_has_zone_and_spanned(capsys):
     data = json.loads(capsys.readouterr().out)
     assert data["zone"]["epsg"] == 32631
     assert [z["epsg"] for z in data["spanned"]] == [32630, 32631]
+
+
+@pytest.mark.parametrize(
+    "lat, lon, epsg",
+    [
+        (64.1466, -21.9426, 32627),  # Reykjavik
+        (-33.9249, 18.4241, 32734),  # Cape Town, southern hemisphere
+        (-0.1807, -78.4678, 32717),  # Quito, just south of the equator
+        (30.0444, 31.2357, 32636),  # Cairo
+        (-36.8485, 174.7633, 32760),  # Auckland
+    ],
+)
+def test_real_places_known_epsg(lat, lon, epsg):
+    assert zone_for_point(lat, lon).epsg == epsg
+
+
+_NAN, _INF = float("nan"), float("inf")
+
+
+@pytest.mark.parametrize(
+    "func, args",
+    [
+        # max_lon / max_lat of zone_for_bbox and min_lon / min_lat of
+        # zones_spanned (the other positions are covered above)
+        (zone_for_bbox, (0, 0, None, 1)),
+        (zone_for_bbox, (0, 0, _INF, 1)),
+        (zone_for_bbox, (0, 0, 1, "x")),
+        (zone_for_bbox, (0, 0, 1, 91)),
+        (zones_spanned, (0, "a", 1, 1)),
+        (zones_spanned, (_NAN, 0, 1, 1)),
+        (zones_spanned, ({}, 0, 1, 1)),
+        (zones_spanned, (0, 2, 1, 1)),
+        # zone_for_geojson on parsed objects (only bbox_from_geojson was
+        # checked with parsed objects above)
+        (zone_for_geojson, (None,)),
+        (zone_for_geojson, (42,)),
+        (zone_for_geojson, ([],)),
+        (zone_for_geojson, ({},)),
+        (zone_for_geojson, ({"type": None},)),
+        (zone_for_geojson, ({"type": "Point", "coordinates": None},)),
+        (zone_for_geojson, ({"type": "Point", "coordinates": []},)),
+        (zone_for_geojson, ({"type": "Point", "coordinates": {"x": 1, "y": 2}},)),
+        (zone_for_geojson, ({"type": "Point", "coordinates": ["1", "2"]},)),
+        (zone_for_geojson, ({"type": "Point", "coordinates": [_NAN, 0]},)),
+        (zone_for_geojson, ({"type": "FeatureCollection", "features": None},)),
+        (zone_for_geojson, ({"type": "FeatureCollection", "features": []},)),
+    ],
+)
+def test_invalid_inputs_raise_value_error(func, args):
+    with pytest.raises(ValueError):
+        func(*args)
+
+
+@pytest.mark.parametrize(
+    "argv",
+    [
+        ["point", "0", "181"],
+        ["point", "-91", "0"],
+        ["bbox", "0", "2", "1", "1"],
+        ["bbox", "0", "0", "181", "1"],
+        ["bbox", "0", "0", "1", "91"],
+    ],
+)
+def test_cli_out_of_range_exits_2(argv, capsys):
+    assert main(argv) == 2
+    assert capsys.readouterr().err.startswith("error: ")
+
+
+def test_cli_non_numeric_argument_is_usage_error():
+    with pytest.raises(SystemExit) as exc:
+        main(["point", "abc", "0"])
+    assert exc.value.code == 2
